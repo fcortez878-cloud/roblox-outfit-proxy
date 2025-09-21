@@ -38,7 +38,7 @@ app.get("/bundle/:assetId", async (req, res) => {
   }
 });
 
-// ================== 3. Bundles by BundleId ==================
+// Bundles by BundleId (clean assetId list)
 app.get("/bundle-info/:bundleId", async (req, res) => {
   try {
     const bundleId = req.params.bundleId;
@@ -46,12 +46,16 @@ app.get("/bundle-info/:bundleId", async (req, res) => {
     const data = await response.json();
 
     if (data && data.id) {
+      const assetIds = (data.items || [])
+        .filter(item => item.type === "Asset")
+        .map(item => item.id);
+
       res.json({
         bundleId: data.id,
         name: data.name,
         description: data.description,
         bundleType: data.bundleType,
-        items: data.items
+        assetIds: assetIds
       });
     } else {
       res.json({ bundleId: null, note: "Bundle not found" });
@@ -60,6 +64,7 @@ app.get("/bundle-info/:bundleId", async (req, res) => {
     res.status(500).json({ error: err.toString() });
   }
 });
+
 
 // ================== 4. Limited Prices ==================
 app.get("/limited-price/:assetId", async (req, res) => {
