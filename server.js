@@ -4,6 +4,41 @@ const fetch = require("node-fetch");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ================== Bundle Cache ==================
+let bundleCache = {}; // assetId -> { bundleId, name }
+let bundleInfoCache = {}; // bundleId -> { bundleId, name, assetIds }
+
+// Helper: load bundle info into cache
+async function getBundleInfo(bundleId) {
+  if (bundleInfoCache[bundleId]) return bundleInfoCache[bundleId];
+
+  const response = await fetch(`https://catalog.roblox.com/v1/bundles/${bundleId}/details`);
+  const data = await response.json();
+
+  if (data && data.id) {
+    const assetIds = (data.items || [])
+      .filter(item => item.type === "Asset")
+      .map(item => item.id);
+
+    // Store mapping for each assetId → bundleId
+    assetIds.forEach(id => {
+      bundleCache[id] = { bundleId: data.id, name: data.name };
+    });
+
+    const info = {
+      bundleId: data.id,
+      name: data.name,
+      description: data.description,
+      bundleType: data.bundleType,
+      assetIds: assetIds
+    };
+
+    bundleInfoCache[bundleId] = info;
+    return info;
+  }
+  return null;
+}
+
 // ================== Homepage ==================
 app.get("/", (_, res) => {
   res.send("✅ Roblox Outfit Proxy is running! Try /outfits/{userId}, /bundle/{assetId}, /bundle-info/{bundleId}, /limited-price/{assetId}");
@@ -24,39 +59,37 @@ app.get("/outfits/:userId", async (req, res) => {
 // ================== 2. Bundles by AssetId ==================
 app.get("/bundle/:assetId", async (req, res) => {
   try {
-    const assetId = req.params.assetId;
+    const assetId = Number(req.params.assetId);
+
+    // 1. Try Roblox API directly
     const response = await fetch(`https://catalog.roblox.com/v1/assets/${assetId}/bundles`);
     const data = await response.json();
 
     if (Array.isArray(data) && data.length > 0) {
-      res.json({ bundleId: data[0].bundleId, name: data[0].name });
-    } else {
-      res.json({ bundleId: null, note: "No bundles found for this assetId" });
+      // Also learn from bundle-info
+      await getBundleInfo(data[0].bundleId);
+      return res.json({ bundleId: data[0].bundleId, name: data[0].name });
     }
+
+    // 2. Fallback: check our cache
+    if (bundleCache[assetId]) {
+      return res.json(bundleCache[assetId]);
+    }
+
+    res.json({ bundleId: null, note: "No bundles found for this assetId" });
   } catch (err) {
     res.status(500).json({ error: err.toString() });
   }
 });
 
-// Bundles by BundleId (clean assetId list)
+// ================== 3. Bundles by BundleId ==================
 app.get("/bundle-info/:bundleId", async (req, res) => {
   try {
     const bundleId = req.params.bundleId;
-    const response = await fetch(`https://catalog.roblox.com/v1/bundles/${bundleId}/details`);
-    const data = await response.json();
+    const info = await getBundleInfo(bundleId);
 
-    if (data && data.id) {
-      const assetIds = (data.items || [])
-        .filter(item => item.type === "Asset")
-        .map(item => item.id);
-
-      res.json({
-        bundleId: data.id,
-        name: data.name,
-        description: data.description,
-        bundleType: data.bundleType,
-        assetIds: assetIds
-      });
+    if (info) {
+      res.json(info);
     } else {
       res.json({ bundleId: null, note: "Bundle not found" });
     }
@@ -64,7 +97,6 @@ app.get("/bundle-info/:bundleId", async (req, res) => {
     res.status(500).json({ error: err.toString() });
   }
 });
-
 
 // ================== 4. Limited Prices ==================
 app.get("/limited-price/:assetId", async (req, res) => {
