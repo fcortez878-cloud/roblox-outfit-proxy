@@ -4,12 +4,12 @@ const fetch = require("node-fetch");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Optional: simple home page so / works
+// ================== Homepage ==================
 app.get("/", (_, res) => {
-  res.send("✅ Roblox Outfit Proxy is running. Try /outfits/{userId}, /bundle/{assetId}, /limited-price/{assetId}");
+  res.send("✅ Roblox Outfit Proxy is running! Try /outfits/{userId}, /bundle/{assetId}, /limited-price/{assetId}");
 });
 
-// 1) Get user outfits
+// ================== 1. Outfits ==================
 app.get("/outfits/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -21,24 +21,29 @@ app.get("/outfits/:userId", async (req, res) => {
   }
 });
 
-// 2) Bundle lookup
+// ================== 2. Bundles ==================
 app.get("/bundle/:assetId", async (req, res) => {
   try {
     const assetId = req.params.assetId;
     const response = await fetch(`https://catalog.roblox.com/v1/assets/${assetId}/bundles`);
     const data = await response.json();
-    res.json(data[0] || {});
+
+    if (Array.isArray(data) && data.length > 0) {
+      res.json({ bundleId: data[0].bundleId, name: data[0].name });
+    } else {
+      res.json({ bundleId: null });
+    }
   } catch (err) {
     res.status(500).json({ error: err.toString() });
   }
 });
 
-// 3) Limited price — return FLOOR (lowest reseller listing). Fallback to RAP.
+// ================== 3. Limited Prices ==================
 app.get("/limited-price/:assetId", async (req, res) => {
   try {
     const assetId = req.params.assetId;
 
-    // First try live resellers (most accurate floor)
+    // Try live resellers (lowest price currently listed)
     const resellersResp = await fetch(
       `https://economy.roblox.com/v2/assets/${assetId}/resellers?limit=1&sortOrder=Asc`
     );
@@ -46,14 +51,13 @@ app.get("/limited-price/:assetId", async (req, res) => {
 
     let price = null;
     if (resellers && resellers.data && resellers.data[0] && typeof resellers.data[0].price === "number") {
-      price = resellers.data[0].price; // floor price
+      price = resellers.data[0].price;
     }
 
-    // Fallback: RAP/lowest from resale-data if no active listings
+    // Fallback: RAP or lowestResalePrice if no active listings
     if (!price) {
       const resaleResp = await fetch(`https://economy.roblox.com/v1/assets/${assetId}/resale-data`);
       const resale = await resaleResp.json();
-      // Prefer lowestResalePrice if present, otherwise RAP
       price = resale.lowestResalePrice || resale.recentAveragePrice || null;
     }
 
@@ -63,12 +67,12 @@ app.get("/limited-price/:assetId", async (req, res) => {
   }
 });
 
-// 4) Discord proxy
+// ================== 4. Discord Proxy ==================
 app.use(express.json());
 app.post("/send-to-discord", async (req, res) => {
   try {
     const webhook = process.env.DISCORD_WEBHOOK;
-    if (!webhook) return res.status(400).json({ error: "No Discord webhook set" });
+    if (!webhook) return res.status(400).json({ error: "No Discord webhook set in environment variables" });
 
     const response = await fetch(webhook, {
       method: "POST",
@@ -82,6 +86,7 @@ app.post("/send-to-discord", async (req, res) => {
   }
 });
 
+// ================== Start Server ==================
 app.listen(PORT, () => {
   console.log(`✅ Roblox Outfit Proxy running on port ${PORT}`);
 });
