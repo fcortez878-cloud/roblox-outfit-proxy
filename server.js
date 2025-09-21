@@ -5,12 +5,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ================== Bundle Cache ==================
-let bundleCache = {}; // assetId -> { bundleId, name }
-let bundleInfoCache = {}; // bundleId -> { bundleId, name, assetIds }
+let bundleCache = {}; // assetId(string) -> { bundleId, name }
+let bundleInfoCache = {}; // bundleId(string) -> { bundleId, name, assetIds }
 
 // Helper: load bundle info into cache
 async function getBundleInfo(bundleId) {
-  if (bundleInfoCache[bundleId]) return bundleInfoCache[bundleId];
+  const key = String(bundleId);
+  if (bundleInfoCache[key]) return bundleInfoCache[key];
 
   const response = await fetch(`https://catalog.roblox.com/v1/bundles/${bundleId}/details`);
   const data = await response.json();
@@ -18,7 +19,7 @@ async function getBundleInfo(bundleId) {
   if (data && data.id) {
     const assetIds = (data.items || [])
       .filter(item => item.type === "Asset")
-      .map(item => item.id);
+      .map(item => String(item.id)); // store as string
 
     // Store mapping for each assetId → bundleId
     assetIds.forEach(id => {
@@ -33,7 +34,7 @@ async function getBundleInfo(bundleId) {
       assetIds: assetIds
     };
 
-    bundleInfoCache[bundleId] = info;
+    bundleInfoCache[key] = info;
     return info;
   }
   return null;
@@ -59,19 +60,19 @@ app.get("/outfits/:userId", async (req, res) => {
 // ================== 2. Bundles by AssetId ==================
 app.get("/bundle/:assetId", async (req, res) => {
   try {
-    const assetId = Number(req.params.assetId);
+    const assetId = String(req.params.assetId);
 
     // 1. Try Roblox API directly
     const response = await fetch(`https://catalog.roblox.com/v1/assets/${assetId}/bundles`);
     const data = await response.json();
 
     if (Array.isArray(data) && data.length > 0) {
-      // Also learn from bundle-info
+      // Learn from bundle-info
       await getBundleInfo(data[0].bundleId);
       return res.json({ bundleId: data[0].bundleId, name: data[0].name });
     }
 
-    // 2. Fallback: check our cache
+    // 2. Fallback: check our cache (string key)
     if (bundleCache[assetId]) {
       return res.json(bundleCache[assetId]);
     }
@@ -85,7 +86,7 @@ app.get("/bundle/:assetId", async (req, res) => {
 // ================== 3. Bundles by BundleId ==================
 app.get("/bundle-info/:bundleId", async (req, res) => {
   try {
-    const bundleId = req.params.bundleId;
+    const bundleId = String(req.params.bundleId);
     const info = await getBundleInfo(bundleId);
 
     if (info) {
