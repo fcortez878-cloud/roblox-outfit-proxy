@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 // ================== Homepage ==================
 app.get("/", (_, res) => {
-  res.send("✅ Roblox Outfit Proxy is running! Try /outfits/{userId}, /bundle/{assetId}, /limited-price/{assetId}");
+  res.send("✅ Roblox Outfit Proxy is running! Try /outfits/{userId}, /bundle/{assetId}, /bundle-info/{bundleId}, /limited-price/{assetId}");
 });
 
 // ================== 1. Outfits ==================
@@ -21,7 +21,7 @@ app.get("/outfits/:userId", async (req, res) => {
   }
 });
 
-// ================== 2. Bundles ==================
+// ================== 2. Bundles by AssetId ==================
 app.get("/bundle/:assetId", async (req, res) => {
   try {
     const assetId = req.params.assetId;
@@ -31,14 +31,37 @@ app.get("/bundle/:assetId", async (req, res) => {
     if (Array.isArray(data) && data.length > 0) {
       res.json({ bundleId: data[0].bundleId, name: data[0].name });
     } else {
-      res.json({ bundleId: null });
+      res.json({ bundleId: null, note: "No bundles found for this assetId" });
     }
   } catch (err) {
     res.status(500).json({ error: err.toString() });
   }
 });
 
-// ================== 3. Limited Prices ==================
+// ================== 3. Bundles by BundleId ==================
+app.get("/bundle-info/:bundleId", async (req, res) => {
+  try {
+    const bundleId = req.params.bundleId;
+    const response = await fetch(`https://catalog.roblox.com/v1/bundles/${bundleId}/details`);
+    const data = await response.json();
+
+    if (data && data.id) {
+      res.json({
+        bundleId: data.id,
+        name: data.name,
+        description: data.description,
+        bundleType: data.bundleType,
+        items: data.items
+      });
+    } else {
+      res.json({ bundleId: null, note: "Bundle not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.toString() });
+  }
+});
+
+// ================== 4. Limited Prices ==================
 app.get("/limited-price/:assetId", async (req, res) => {
   try {
     const assetId = req.params.assetId;
@@ -67,7 +90,7 @@ app.get("/limited-price/:assetId", async (req, res) => {
   }
 });
 
-// ================== 4. Discord Proxy ==================
+// ================== 5. Discord Proxy ==================
 app.use(express.json());
 app.post("/send-to-discord", async (req, res) => {
   try {
