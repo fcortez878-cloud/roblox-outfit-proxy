@@ -51,7 +51,14 @@ app.get("/outfits/:userId", async (req, res) => {
     const userId = req.params.userId;
     const response = await fetch(`https://avatar.roblox.com/v1/users/${userId}/outfits`);
     const data = await response.json();
-    res.json(data);
+
+    if (data && Array.isArray(data.data)) {
+      // Filter only saved outfits (not bundles)
+      const filtered = data.data.filter(outfit => outfit.source === "UserOutfit");
+      res.json({ total: filtered.length, data: filtered });
+    } else {
+      res.json({ total: 0, data: [] });
+    }
   } catch (err) {
     res.status(500).json({ error: err.toString() });
   }
