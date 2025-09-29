@@ -45,25 +45,49 @@ app.get("/", (_, res) => {
   res.send("✅ Roblox Outfit Proxy is running! Try /outfits/{userId}, /bundle/{assetId}, /bundle-info/{bundleId}, /limited-price/{assetId}");
 });
 
-// ================== 1. Outfits ==================
+// ================== Outfits ==================
 app.get("/outfits/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
-    const response = await fetch(`https://avatar.roblox.com/v1/users/${userId}/outfits`);
-    const data = await response.json();
 
-    if (data && Array.isArray(data.data)) {
-      // Only keep user-created outfits
-      const filtered = data.data.filter(outfit => outfit.isEditable === true);
+    // Always fetch fresh from Roblox
+    const response = await fetch(
+      `https://avatar.roblox.com/v1/users/${userId}/outfits?cacheBust=${Date.now()}`,
+      { headers: { "Cache-Control": "no-cache" } }
+    );
 
-      res.json({ total: filtered.length, data: filtered });
-    } else {
-      res.json({ total: 0, data: [] });
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `Roblox API returned ${response.status}` });
     }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      console.error("JSON parse error:", err);
+      return res.status(500).json({ error: "Failed to parse JSON", details: err.toString() });
+    }
+
+    // Defensive checks
+    if (!data || !Array.isArray(data.data)) {
+      console.warn("Unexpected Roblox response:", data);
+      return res.json({ userId, total: 0, data: [] });
+    }
+
+    // Filter real outfits
+    const filtered = data.data.filter(outfit => outfit.isEditable === true);
+
+    res.json({
+      userId,
+      total: filtered.length,
+      data: filtered
+    });
   } catch (err) {
+    console.error("Error fetching outfits:", err);
     res.status(500).json({ error: err.toString() });
   }
 });
+
 
 
 // ================== 2. Bundles by AssetId ==================
