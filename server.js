@@ -53,16 +53,8 @@ app.get("/outfits/:userId", async (req, res) => {
     const data = await response.json();
 
     if (data && Array.isArray(data.data)) {
-      const filtered = data.data.filter(outfit => {
-        // Must have valid id + name
-        if (!outfit.id || !outfit.name) return false;
-
-        // Exclude if it looks like a bundle/animation
-        if (outfit.assetType || outfit.bundleId) return false;
-
-        // Otherwise keep it
-        return true;
-      });
+      // Only keep user-created outfits
+      const filtered = data.data.filter(outfit => outfit.isEditable === true);
 
       res.json({ total: filtered.length, data: filtered });
     } else {
@@ -72,8 +64,6 @@ app.get("/outfits/:userId", async (req, res) => {
     res.status(500).json({ error: err.toString() });
   }
 });
-
-
 
 
 // ================== 2. Bundles by AssetId ==================
