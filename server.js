@@ -53,13 +53,8 @@ app.get("/outfits/:userId", async (req, res) => {
     const data = await response.json();
 
     if (data && Array.isArray(data.data)) {
-      // Filter out bundles & animation packs
-      const filtered = data.data.filter(outfit => {
-        // Roblox "real" saved outfits are named by the user and NOT marked as isEditable = false
-        const notBundle = outfit.source === "UserOutfit";
-        const editable = outfit.isEditable === true; // bundles are usually false
-        return notBundle && editable;
-      });
+      // Only keep true user-made outfits
+      const filtered = data.data.filter(outfit => outfit.outfitType === "UserOutfit");
 
       res.json({ total: filtered.length, data: filtered });
     } else {
@@ -69,6 +64,7 @@ app.get("/outfits/:userId", async (req, res) => {
     res.status(500).json({ error: err.toString() });
   }
 });
+
 
 
 // ================== 2. Bundles by AssetId ==================
